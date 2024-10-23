@@ -1,17 +1,14 @@
-import React from "react";
 import "./style.css";
 import aiIcon from "@/assets/aiIcon.svg";
-import { ReactElement } from "react";
 import ReactDOM from "react-dom/client";
+import ChatModal from "@/components/ChatModal";
+import { ShadowRootContentScriptUi } from "wxt/client";
 import "~/assets/tailwind.css";
-import SendIcon from "~/assets/sendIcon.svg";
-import GenerateIcon from "~/assets/generateIcon.svg";
-import DownArrowIcon from "~/assets/downArrow.svg";
-import ChatPreview from "@/components/ChatPreview";
 
-const AIIconElement = () => {
-  const clickHandler = () => {
-    console.log("Trigger opening modal");
+const AIIconElement = ({ ctx, handleMount }) => {
+  const clickHandler = async () => {
+    console.log("Trigger opening modal", { ctx });
+    await handleMount();
   };
   return (
     <img
@@ -24,232 +21,136 @@ const AIIconElement = () => {
   );
 };
 
-interface ChatModalWrapperProps {
-  // children: ReactElement; // todo : should I  remove it ?
-  wrapperclassNamees?: string;
-  primaryBtn: {
-    // todo: code redunancy
-    text: string;
-    img: string;
-    handler: any; // todo : type should be function
-    classNamees?: string;
-  };
-  secondaryBtn?: {
-    text: string;
-    img: string;
-    handler: any;
-    classNamees?: string;
-  };
-}
-
-const ChatModalWrapper = (props: ChatModalWrapperProps) => {
-  const { children, primaryBtn, secondaryBtn, wrapperclassNamees } = props;
-  console.log("modal", { primaryBtn });
-  return (
-    <div
-      className={`w-[870px] border-2 border-red-500  relative z-[9999] top-[50vh] left-[0px] p-4 rounded-md  ${wrapperclassNamees}`}
-      style={{ backgroundColor: "white" }}
-    >
-      <div className="">{children}</div>
-      <div className="mt-4 flex justify-end gap-3">
-        {secondaryBtn && (
-          <button
-            className={`flex gap-2 items-center bg-white border-2 border-primary-default py-1 px-2 rounded text-primary-default ${
-              secondaryBtn.classNamees || ""
-            }`}
-            style={{ color: "white" }} // todo: why this instead of tailwind classese
-            onClick={secondaryBtn.handler}
-          >
-            <img src={secondaryBtn.img} className="size-4" />
-            <span className="text-inherit text-primary-default">
-              {secondaryBtn.text}
-            </span>
-          </button>
-        )}
-        {primaryBtn && (
-          <button
-            className={`flex gap-2 items-center bg-primary-blue border-none py-1 px-2 rounded ${
-              primaryBtn.classNamees || ""
-            }`}
-            style={{ color: "white" }} // todo: why this instead of tailwind classese
-            onClick={primaryBtn.handler}
-          >
-            <img src={primaryBtn.img} className="size-4" />
-            <span className="">{primaryBtn.text}</span>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
-
-interface BaseInputProps {
-  name: string;
-  value: string | null;
-  inputHandler(value: string): any;
-  placeholder: string;
-  type?: string;
-  classNamees?: string;
-}
-
-const BasiInput = (props: BaseInputProps) => {
-  const {
-    name,
-    value,
-    inputHandler,
-    placeholder,
-    type = "text",
-    classNamees = "",
-  } = props;
-  return (
-    <input
-      className={`border rounded-md border-red-400 p-2 w-full  ${classNamees}`}
-      name={name}
-      type={type}
-      value={value ?? ""}
-      placeholder={placeholder}
-      onChange={(ev) => inputHandler(ev.target.value)}
-    />
-  );
-};
-const ChatModal = () => {
-  const [isChatPreviewOpen, setChatPreviewOpen] =
-    React.useState<boolean>(false);
-  // todo: create use memo for getting the props and dependency as isChatPrivewOPen
-  const toggleChatPreview = () => setChatPreviewOpen((prevSt) => !prevSt);
-
-  // const propsToSet: ChatModalWrapperProps = {
-  //   // children: <Demo />,
-  //   primaryBtn: {
-  //     text: "Generate",
-  //     handler: setChatPreviewOpen(),
-  //     img: SendIcon,
-  //   },
-  // };
-  const getModalProps = (): ChatModalWrapperProps => {
-    if (isChatPreviewOpen) {
-      return {
-        primaryBtn: {
-          text: "Regenerate",
-          handler: toggleChatPreview,
-          img: GenerateIcon,
-        },
-        secondaryBtn: {
-          text: "Insert",
-          handler: () => {},
-          img: DownArrowIcon,
-          classNamees: "border border-primary-default",
-        },
-      };
-    }
-
-    return {
-      primaryBtn: {
-        text: "Genearte",
-        handler: toggleChatPreview,
-        img: SendIcon,
-      },
-    };
-  };
-
-  const getBaseInputProps = (): BaseInputProps => {
-    if (isChatPreviewOpen) {
-      return {
-        inputHandler: () => {},
-        name: "chat-input",
-        placeholder: "Your prompt",
-        value: null,
-      };
-    }
-    return {
-      inputHandler: () => {},
-      name: "chat-input",
-      placeholder: "Reply thanking for the opportunity",
-      value: null,
-    };
-  };
-  return (
-    <ChatModalWrapper {...getModalProps()}>
-      {isChatPreviewOpen && <ChatPreview />}
-      <BasiInput {...getBaseInputProps()} />
-    </ChatModalWrapper>
-  );
-};
-
 export default defineContentScript({
   matches: ["*://*/*"], // todo: match only linkedin
   cssInjectionMode: "ui",
 
   async main(ctx) {
-    setTimeout(() => {
-      moundChatModal(ctx);
-    }, 500);
-    const elements = new Map();
+    const handleMount = async (curChatInput: Element) => {
+      console.log("handle Mount", { curChatInput });
+      await moundChatModal({ ctx, curChatInput });
+    };
+    const mountStateMap = new Map<Element, string>();
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
-          const nodeList = document.querySelectorAll(
-            '[role="dialog"][aria-label="Messaging"][data-view-name="message-overlay-conversation-bubble-item"]'
-          );
-          Array.from(nodeList).forEach((node) => {
-            const chatInput = node?.querySelector(
-              'div[aria-label="Write a message…"][role="textbox"]'
+          const { pathname } = window.location;
+          const activeScreen = pathname.split("/")[1];
+          if (activeScreen === "feed") {
+            const nodeList: NodeListOf<Element> = document.querySelectorAll(
+              '[role="dialog"][aria-label="Messaging"][data-view-name="message-overlay-conversation-bubble-item"]'
             );
-            if (!chatInput || elements.has(node)) {
-              return;
-            }
-            elements.set(node, node.id);
-            handleMountAIBtn(ctx, chatInput, node);
-          });
+            handleSelectInputBox({
+              nodeList,
+              mountStateMap,
+              ctx,
+              handleMount,
+            });
+          } else if (activeScreen === "messaging") {
+            const nodeList: NodeListOf<Element> = document.querySelectorAll(
+              '[role="dialog"][aria-label="Messaging"][data-view-name="message-overlay-conversation-bubble-item"]'
+            );
+            handleSelectInputBox({
+              nodeList,
+              mountStateMap,
+              ctx,
+              handleMount,
+            });
+            const pageChatEle: Element | null =
+              document.querySelector(".msg-convo-wrapper");
+            handleSelectInputBox({
+              element: pageChatEle,
+              mountStateMap,
+              ctx,
+              handleMount,
+            });
+          }
         });
         mutation.removedNodes.forEach((node) => {});
       });
     });
-
     observer.observe(document.body, { childList: true, subtree: true });
   },
 });
-console.log("cool");
 
-async function handleMountAIBtn(ctx, anchorElement, chatBoxContainer) {
-  console.log("me", { anchorElement });
-  let focusListener = () => {};
-  let blurListener = () => {};
-  // let focusOutListener = () => {};
-  const ui = await createShadowRootUi(ctx, {
-    name: "wxt-react-example",
-    position: "overlay",
-    anchor: anchorElement,
-    append: "last",
-    onMount: (container) => {
-      const wrapper = document.createElement("div");
-      container.append(wrapper);
-
-      const root = ReactDOM.createRoot(wrapper);
-      root.render(<AIIconElement />);
-      return root;
-    },
-    onRemove: (elements) => {
-      // todo: need to make sure whether completey recreatign the shadow dom is ok or not
-      elements?.unmount();
-      // elements?.root.unmount();
-      ui.mounted?.unmount();
-      // anchorElement.removeEventListener("focusout", focusOutListener);
-      // elements?.wrapper.remove();
-    },
+const handleSelectInputBox = (props: {
+  nodeList?: NodeListOf<Element>;
+  element?: Element | null;
+  mountStateMap: Map<Element, string>;
+  ctx: any;
+  handleMount: any;
+}) => {
+  const { ctx, mountStateMap, handleMount, nodeList, element } = props;
+  let elementsList: Array<Element> = [];
+  if (element) {
+    elementsList = [element];
+  } else if (nodeList) {
+    elementsList = Array.from(nodeList);
+  }
+  elementsList.forEach((node) => {
+    const chatInput = node?.querySelector(
+      'div[aria-label="Write a message…"][role="textbox"]'
+    );
+    if (!chatInput || mountStateMap.has(node)) {
+      return;
+    }
+    mountStateMap.set(node, node.id);
+    handleMountAIBtn(ctx, chatInput, handleMount);
   });
+};
+
+async function handleMountAIBtn(ctx, anchorElement: Element, handleMount) {
+  console.log("me", { anchorElement, ctx });
+  const ui: ShadowRootContentScriptUi<ReactDOM.Root> = await createShadowRootUi(
+    ctx,
+    {
+      name: "ai-btn",
+      position: "inline",
+      anchor: anchorElement,
+      append: "after",
+      onMount: (container) => {
+        const wrapper = document.createElement("div");
+        wrapper.style.width = "32px";
+        Object.assign(wrapper.style, {
+          position: "absolute",
+          right: "2px",
+          bottom: 0,
+        });
+        container.append(wrapper);
+        const root = ReactDOM.createRoot(wrapper);
+        root.render(
+          <AIIconElement
+            ctx={ctx}
+            handleMount={async () => await handleMount(anchorElement)}
+          />
+        );
+        return root;
+      },
+      onRemove: (elements) => {
+        elements?.unmount();
+      },
+    }
+  );
   if (document.activeElement === anchorElement) {
     ui.mount();
   }
-  focusListener = anchorElement.addEventListener("focus", () => {
-    console.log("mount now", chatBoxContainer.id);
+  const focusListener = anchorElement.addEventListener("focus", () => {
+    console.log("mount now");
     ui.mount();
   });
 
-  blurListener = anchorElement.addEventListener("blur", () => {
-    console.log("remove now", chatBoxContainer.id);
-    console.log("type", ui.mounted?._internalRoot);
-    ui.remove();
+  let blurTimeout: NodeJS.Timeout | null = null;
+
+  anchorElement.addEventListener("blur", () => {
+    if (blurTimeout) {
+      clearTimeout(blurTimeout);
+    }
+
+    blurTimeout = setTimeout(() => {
+      if (ui && typeof ui.remove === "function") {
+        ui.remove();
+      }
+    }, 500);
   });
   ctx.onInvalidated(() => {
     console.log("ctx invalidated");
@@ -258,7 +159,10 @@ async function handleMountAIBtn(ctx, anchorElement, chatBoxContainer) {
   });
 }
 
-async function moundChatModal(ctx) {
+async function moundChatModal(props: { ctx: any; curChatInput: Element }) {
+  console.log("start modal mount");
+  const { ctx, curChatInput } = props;
+  const mainApp = document.body as HTMLBodyElement;
   const ui = await createShadowRootUi(ctx, {
     name: "ai-chat-modal",
     position: "overlay",
@@ -266,15 +170,33 @@ async function moundChatModal(ctx) {
     append: "before",
     onMount: (container) => {
       console.log("modal", { container });
-      const wrapper = document.createElement("div");
-      // wrapper.classNameList.add("border-4 border-red-400");
+      Object.assign(mainApp.style, {
+        pointerEvents: "none",
+        opacity: 0.3,
+      });
+      const wrapper: HTMLDivElement = document.createElement("div");
+      Object.assign(wrapper.style, {
+        height: "100vh",
+        width: "100vw",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+      });
+      wrapper.addEventListener("click", (ev) => {
+        if (ev.target === ev.currentTarget) {
+          ui.remove();
+        }
+      });
       container.append(wrapper);
-
       const root = ReactDOM.createRoot(wrapper);
-      root.render(<ChatModal />);
+      root.render(<ChatModal ui={ui} curChatInput={curChatInput} />);
       return root;
     },
     onRemove: (element) => {
+      Object.assign(mainApp.style, {
+        pointerEvents: "initial",
+        opacity: "initial",
+      });
       element?.unmount();
     },
   });
