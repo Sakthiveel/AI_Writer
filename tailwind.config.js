@@ -7,6 +7,7 @@ export default {
       primary: {
         default: "#666D80",
         blue: "#3B82F6",
+        border: "#C1C7D0",
       },
       chat: {
         sender: "#DFE1E7",
