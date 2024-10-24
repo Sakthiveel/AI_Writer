@@ -4,6 +4,7 @@ export default {
   content: ["assets/**", "entrypoints/**", "components/**"],
   theme: {
     colors: {
+      white: "#FFFFFF",
       primary: {
         default: "#666D80",
         blue: "#3B82F6",

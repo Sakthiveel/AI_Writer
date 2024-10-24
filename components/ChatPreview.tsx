@@ -1,9 +1,9 @@
-const ChatPreview = () => {
+const ChatPreview = (props: { prompt: string | null }) => {
   return (
-    <div className="min-w-[870px] flex flex-col gap-5 mb-5">
+    <div className="min-w-[870px] flex flex-col gap-6 mb-6">
       <div className="self-end bg-chat-sender p-4 rounded-lg max-w-[70%]">
         <div className="text-2xl leading-9 font-normal text-primary-default">
-          Reply thanking for the opportunity
+          {"Reply thanking for the opportunity"}
         </div>
       </div>
       <div className="self-start bg-chat-receiver p-4 rounded-lg max-w-[70%]">

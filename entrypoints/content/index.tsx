@@ -5,29 +5,12 @@ import ChatModal from "@/components/ChatModal";
 import { ShadowRootContentScriptUi } from "wxt/client";
 import "~/assets/tailwind.css";
 
-const AIIconElement = ({ ctx, handleMount }) => {
-  const clickHandler = async () => {
-    console.log("Trigger opening modal", { ctx });
-    await handleMount();
-  };
-  return (
-    <img
-      src={aiIcon}
-      id="aiIcon"
-      alt="ai_Icon"
-      onClick={clickHandler}
-      style={{ width: 32, height: 32 }}
-    />
-  );
-};
-
 export default defineContentScript({
   matches: ["*://*/*"], // todo: match only linkedin
   cssInjectionMode: "ui",
 
   async main(ctx) {
-    const handleMount = async (curChatInput: Element) => {
-      console.log("handle Mount", { curChatInput });
+    const handleModalMount = async (curChatInput: Element) => {
       await moundChatModal({ ctx, curChatInput });
     };
     const mountStateMap = new Map<Element, string>();
@@ -40,47 +23,49 @@ export default defineContentScript({
             const nodeList: NodeListOf<Element> = document.querySelectorAll(
               '[role="dialog"][aria-label="Messaging"][data-view-name="message-overlay-conversation-bubble-item"]'
             );
-            handleSelectInputBox({
+            handlePreProcessMountAIBtn({
               nodeList,
               mountStateMap,
               ctx,
-              handleMount,
+              handleModalMount,
             });
           } else if (activeScreen === "messaging") {
             const nodeList: NodeListOf<Element> = document.querySelectorAll(
               '[role="dialog"][aria-label="Messaging"][data-view-name="message-overlay-conversation-bubble-item"]'
             );
-            handleSelectInputBox({
+            handlePreProcessMountAIBtn({
               nodeList,
               mountStateMap,
               ctx,
-              handleMount,
+              handleModalMount,
             });
             const pageChatEle: Element | null =
               document.querySelector(".msg-convo-wrapper");
-            handleSelectInputBox({
+            handlePreProcessMountAIBtn({
               element: pageChatEle,
               mountStateMap,
               ctx,
-              handleMount,
+              handleModalMount,
             });
           }
         });
-        mutation.removedNodes.forEach((node) => {});
+        mutation.removedNodes.forEach((node) => {
+          //todo: handle 'mountStateMap' cleanup
+        });
       });
     });
     observer.observe(document.body, { childList: true, subtree: true });
   },
 });
 
-const handleSelectInputBox = (props: {
+const handlePreProcessMountAIBtn = (props: {
   nodeList?: NodeListOf<Element>;
   element?: Element | null;
   mountStateMap: Map<Element, string>;
   ctx: any;
-  handleMount: any;
+  handleModalMount: any;
 }) => {
-  const { ctx, mountStateMap, handleMount, nodeList, element } = props;
+  const { ctx, mountStateMap, handleModalMount, nodeList, element } = props;
   let elementsList: Array<Element> = [];
   if (element) {
     elementsList = [element];
@@ -88,19 +73,23 @@ const handleSelectInputBox = (props: {
     elementsList = Array.from(nodeList);
   }
   elementsList.forEach((node) => {
-    const chatInput = node?.querySelector(
+    const chatInput: HTMLDivElement | null = node?.querySelector(
       'div[aria-label="Write a message…"][role="textbox"]'
     );
     if (!chatInput || mountStateMap.has(node)) {
       return;
     }
     mountStateMap.set(node, node.id);
-    handleMountAIBtn(ctx, chatInput, handleMount);
+    mountAIBtn({ ctx, anchorElement: chatInput, handleModalMount });
   });
 };
 
-async function handleMountAIBtn(ctx, anchorElement: Element, handleMount) {
-  console.log("me", { anchorElement, ctx });
+async function mountAIBtn(props: {
+  ctx: any;
+  anchorElement: HTMLDivElement;
+  handleModalMount: (curChatInput: Element) => void;
+}) {
+  const { anchorElement, ctx, handleModalMount } = props;
   const ui: ShadowRootContentScriptUi<ReactDOM.Root> = await createShadowRootUi(
     ctx,
     {
@@ -120,8 +109,7 @@ async function handleMountAIBtn(ctx, anchorElement: Element, handleMount) {
         const root = ReactDOM.createRoot(wrapper);
         root.render(
           <AIIconElement
-            ctx={ctx}
-            handleMount={async () => await handleMount(anchorElement)}
+            handleModalMount={() => handleModalMount(anchorElement)}
           />
         );
         return root;
@@ -150,17 +138,15 @@ async function handleMountAIBtn(ctx, anchorElement: Element, handleMount) {
       if (ui && typeof ui.remove === "function") {
         ui.remove();
       }
-    }, 500);
+    }, 200); // todo: verify this behaviour
   });
   ctx.onInvalidated(() => {
     console.log("ctx invalidated");
-    // anchorElement.removeEventListener("focus", focusListener);
-    // anchorElement.removeEventListener("blur", blurListener);
+    //todo: handle cleanup here
   });
 }
 
 async function moundChatModal(props: { ctx: any; curChatInput: Element }) {
-  console.log("start modal mount");
   const { ctx, curChatInput } = props;
   const mainApp = document.body as HTMLBodyElement;
   const ui = await createShadowRootUi(ctx, {
@@ -169,19 +155,18 @@ async function moundChatModal(props: { ctx: any; curChatInput: Element }) {
     anchor: document.body,
     append: "before",
     onMount: (container) => {
-      console.log("modal", { container });
-      Object.assign(mainApp.style, {
-        pointerEvents: "none",
-        opacity: 0.3,
-      });
       const wrapper: HTMLDivElement = document.createElement("div");
-      Object.assign(wrapper.style, {
-        height: "100vh",
-        width: "100vw",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-      });
+      wrapper.classList.add(
+        "h-[100vh]",
+        "w-[100vw]",
+        "flex",
+        "items-center",
+        "justify-center",
+        "fixed",
+        "z-[9999]",
+        "backdrop-blur-sm",
+        "bg-blue-300"
+      );
       wrapper.addEventListener("click", (ev) => {
         if (ev.target === ev.currentTarget) {
           ui.remove();
@@ -193,12 +178,28 @@ async function moundChatModal(props: { ctx: any; curChatInput: Element }) {
       return root;
     },
     onRemove: (element) => {
-      Object.assign(mainApp.style, {
-        pointerEvents: "initial",
-        opacity: "initial",
-      });
       element?.unmount();
     },
   });
   ui.mount();
+  ctx.onInvalidated(() => {
+    console.log("ctx invalidated");
+    //todo: handle cleanup here
+  });
+}
+
+function AIIconElement(props: { handleModalMount: any }) {
+  const { handleModalMount } = props;
+  const clickHandler = async () => {
+    await handleModalMount();
+  };
+  return (
+    <img
+      src={aiIcon}
+      id="aiIcon"
+      alt="ai_Icon"
+      onClick={clickHandler}
+      style={{ width: 32, height: 32 }}
+    />
+  );
 }
